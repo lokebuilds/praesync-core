@@ -1,40 +1,41 @@
-"""
-Database Connection Pool Manager
-Simulates an unmanaged connection pool with socket exhaustion bug.
-"""
 import time
-import socket
-from typing import Optional, Dict, Any
+import logging
+import psycopg2
+from psycopg2 import OperationalError
 
-_MAX_CONNECTIONS = 5
-_ACTIVE_POOL: Dict[str, Any] = {}
+logger = logging.getLogger(__name__)
 
-class DatabasePoolError(Exception):
-    """Raised when connection pool capacity is exceeded."""
-    pass
-
-def acquire_connection(timeout: float = 2.0):
+def connect_with_retry(db_config, max_retries=5, initial_backoff=1.0, backoff_factor=2.0):
     """
-    Acquires an active socket from the auth-db-primary connection pool.
-    BUG: Fails to reap stale sockets on transient timeout, causing pool exhaustion.
+    Establishes a connection to auth-db-primary with exponential backoff retry logic
+    and configured TCP keepalives to remediate Sev-1 connection timeouts.
     """
-    connection_id = f"conn-{len(_ACTIVE_POOL) + 1}"
+    retries = 0
+    backoff = initial_backoff
     
-    # Buggy condition: artificial pool exhaustion threshold
-    if len(_ACTIVE_POOL) >= _MAX_CONNECTIONS:
-        raise DatabasePoolError(
-            "Sev-1: auth-db-primary connection pool exhausted. Socket timeout waiting for release."
-        )
-
-    # Simulate connection leak: connection added but never returned to pool
-    _ACTIVE_POOL[connection_id] = {
-        "host": "auth-db-primary.internal",
-        "port": 5432,
-        "acquired_at": time.time(),
-        "status": "ALLOCATED"
-    }
-    return _ACTIVE_POOL[connection_id]
-
-def release_connection(connection_id: str):
-    """Release socket back to pool."""
-    _ACTIVE_POOL.pop(connection_id, None)
+    while True:
+        try:
+            logger.info(f"Attempting connection to auth-db-primary (attempt {retries + 1}/{max_retries})...")
+            conn = psycopg2.connect(
+                dbname=db_config.get("dbname"),
+                user=db_config.get("user"),
+                password=db_config.get("password"),
+                host=db_config.get("host"),
+                port=db_config.get("port"),
+                connect_timeout=db_config.get("connect_timeout", 10),
+                keepalives=1,
+                keepalives_idle=30,
+                keepalives_interval=10,
+                keepalives_count=5
+            )
+            logger.info("Successfully connected to auth-db-primary.")
+            return conn
+        except OperationalError as err:
+            retries += 1
+            if retries >= max_retries:
+                logger.error(f"Failed to connect to auth-db-primary after {max_retries} attempts: {err}")
+                raise err
+            
+            logger.warning(f"Connection failed: {err}. Retrying in {backoff:.2f}s...")
+            time.sleep(backoff)
+            backoff *= backoff_factor
