@@ -1,40 +1,26 @@
-import os
 import time
 import logging
-import psycopg2
-from psycopg2 import OperationalError
+import random
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("auth_db_patcher")
+logger = logging.getLogger("auth_db_primary")
 
-MAX_RETRIES = int(os.getenv("DB_MAX_RETRIES", "5"))
-INITIAL_BACKOFF = float(os.getenv("DB_INITIAL_BACKOFF", "1.0"))
-BACKOFF_FACTOR = float(os.getenv("DB_BACKOFF_FACTOR", "2.0"))
-CONNECT_TIMEOUT = int(os.getenv("DB_CONNECT_TIMEOUT", "10"))
-
-def get_db_connection(dsn: str = None):
+def connect_with_retry(connect_fn, max_retries=5, base_delay=1.0, max_delay=30.0):
     """
-    Establishes a resilient database connection to auth-db-primary with exponential backoff retries.
-    Mitigates transient Sev-1 DB connection timeouts.
+    Establishes a connection to auth-db-primary using exponential backoff with jitter.
+    Remediates Sev-1 database connection timeouts under burst traffic.
     """
-    if not dsn:
-        dsn = os.getenv(
-            "AUTH_DB_DSN",
-            "host=auth-db-primary port=5432 dbname=auth user=auth_user connect_timeout=" + str(CONNECT_TIMEOUT)
-        )
-
-    backoff = INITIAL_BACKOFF
-    for attempt in range(1, MAX_RETRIES + 1):
+    for attempt in range(1, max_retries + 1):
         try:
-            logger.info("Attempting connection to auth-db-primary (Attempt %d/%d)...", attempt, MAX_RETRIES)
-            conn = psycopg2.connect(dsn, connect_timeout=CONNECT_TIMEOUT)
+            logger.info(f"Connecting to auth-db-primary (attempt {attempt}/{max_retries})...")
+            conn = connect_fn()
             logger.info("Successfully established connection to auth-db-primary.")
             return conn
-        except (OperationalError, Exception) as exc:
-            logger.warning("Connection attempt %d to auth-db-primary failed: %s", attempt, exc)
-            if attempt == MAX_RETRIES:
-                logger.error("Exhausted all %d connection attempts to auth-db-primary.", MAX_RETRIES)
-                raise exc
-            logger.info("Retrying connection in %.2f seconds...", backoff)
-            time.sleep(backoff)
-            backoff *= BACKOFF_FACTOR
+        except Exception as err:
+            if attempt == max_retries:
+                logger.error(f"Exhausted all {max_retries} connection attempts to auth-db-primary: {err}")
+                raise err
+            delay = min(max_delay, base_delay * (2 ** (attempt - 1)))
+            jitter = random.uniform(0, 0.1 * delay)
+            total_delay = delay + jitter
+            logger.warning(f"Database connection attempt {attempt} failed ({err}). Retrying in {total_delay:.2f}s...")
+            time.sleep(total_delay)
