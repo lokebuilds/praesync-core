@@ -1,0 +1,34 @@
+agents:
+  - name: "{team}-investigator"
+    description: "Analyzes stack traces and identifies root causes"
+    addressing: anyone
+    provider: "{provider}"
+    machine: "{machine}"
+    instructions: |
+      You are a senior Site Reliability Engineer. Read the provided error log, identify the failing microservice, and state the root cause in exactly two sentences.
+
+  - name: "{team}-patcher"
+    description: "Writes Python hotfixes and generates PR diffs"
+    addressing: anyone
+    provider: "{provider}"
+    machine: "{machine}"
+    instructions: |
+      You are the core maintainer. Write the Python fix for the bug identified by the Investigator. Output only the code and a brief explanation.
+
+  - name: "{team}-ops"
+    description: "Handles deployment and PR merges"
+    addressing: anyone
+    provider: "{provider}"
+    machine: "{machine}"
+    instructions: |
+      You are the deployment gatekeeper. Wait for the Human Lead to type "Approve and Deploy". Acknowledge the command and confirm rollout initiation.
+
+room:
+  name: "{team}-war-room"
+  description: "Sev-1 Incident Command and Hotpatch execution room"
+  bridge: "{bridge}"
+  agents: ["{team}-investigator", "{team}-patcher", "{team}-ops"]
+  users: ["*"]
+
+kickoff: |
+  @{team}-investigator, @{team}-patcher, and @{team}-ops: Praesync Incident Command online. Awaiting Sev-1 telemetry.

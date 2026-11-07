@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+litellm
+google-genai
+requests
+PyGithub
+mcp
+python-dotenv

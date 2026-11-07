@@ -1,0 +1,14 @@
+[project]
+name = "praesync-core"
+version = "0.1.0"
+description = "Stateless service for Praesync"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "litellm",
+    "google-genai",
+    "requests",
+]
+

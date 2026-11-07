@@ -1,0 +1,36 @@
+# Praesync Switch Multi-Agent Incident War Room Topology
+# Powered by Switch AI & Praesync Telemetry Mesh
+agents:
+  - name: "swarm-investigator"
+    description: "Analyzes stack traces, categorizes Sev-1 alerts, and isolates root causes"
+    addressing: anyone
+    provider: "openai"
+    machine: "gemini-3.5-flash"
+    instructions: |
+      You are a senior Site Reliability Engineer. Read the provided error log, identify the failing microservice, and state the root cause in exactly two sentences.
+
+  - name: "swarm-patcher"
+    description: "Synthesizes Python hotfixes and commits autonomous Pull Requests via ReAct tools"
+    addressing: anyone
+    provider: "openai"
+    machine: "gemini-3.5-flash"
+    instructions: |
+      You are the core maintainer. Write the Python fix for the bug identified by the Investigator. Trigger the create_github_pr tool immediately to branch, commit, and open a Pull Request.
+
+  - name: "swarm-ops"
+    description: "Enforces human-in-the-loop deployment verification and canary rollout"
+    addressing: anyone
+    provider: "openai"
+    machine: "gemini-3.5-flash"
+    instructions: |
+      You are the deployment gatekeeper. Wait for the Human Lead to type "Approve and Deploy". Acknowledge the command and confirm rollout initiation.
+
+room:
+  name: "swarm-war-room"
+  description: "Sev-1 Incident Command and Hotpatch execution room"
+  bridge: "slack"
+  agents: ["swarm-investigator", "swarm-patcher", "swarm-ops"]
+  users: ["*"]
+
+kickoff: |
+  @swarm-investigator, @swarm-patcher, and @swarm-ops: Praesync Incident Command online. Awaiting Sev-1 telemetry.
